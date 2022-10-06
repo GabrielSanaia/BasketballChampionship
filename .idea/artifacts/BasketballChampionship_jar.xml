@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="BasketballChampionship:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/BasketballChampionship_jar</output-path>
+    <root id="archive" name="BasketballChampionship.jar">
+      <element id="module-output" name="BasketballChampionship" />
+    </root>
+  </artifact>
+</component>
