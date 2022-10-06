@@ -1,8 +1,8 @@
 package Model;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.Period;
@@ -11,17 +11,28 @@ import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Stream;
 
 public class Basketballer extends Person implements BasketballerInterface, Comparable<Basketballer> {
     private double height; //in meters
     private LocalDate dateOfBirth;
     private int age;
     private int quantityOfWins;
-    private Map<String, Integer> skills;
+    protected Map<String, Integer> skills;
+
+    private static final int MIN_AGE = 18;
+    private static final int MAX_AGE = 42;
+    private static final String namesFile = "src/Data/Names.txt";
+    private static final String surnamesFile = "src/Data/Surnames.txt";
+    private static final String exportFile = "src/Data/export.csv";
 
 
 
-    public Basketballer(String name, String surname, long ID, double height, int dayOfBirth, int monthOfBirth,
+    public Basketballer() {
+
+    }
+
+    public Basketballer(String name, String surname, String ID, double height, int dayOfBirth, int monthOfBirth,
                         int yearOfBirth, int quantityOfWins){
         super(name, surname, ID);
         this.height = height;
@@ -40,17 +51,20 @@ public class Basketballer extends Person implements BasketballerInterface, Compa
         init();
     }
 
-    public Basketballer(String name, String surname, long ID, double height, LocalDate dateOfBirth, int quantityOfWins) {
+    public Basketballer(String name, String surname, String ID, double height, LocalDate dateOfBirth, int currentYear) {
         super(name, surname, ID);
         this.height = height;
         this.dateOfBirth = dateOfBirth;
-        this.quantityOfWins = quantityOfWins;
+        quantityOfWins = 0;
+
+        LocalDate currentDate = LocalDate.parse(String.format("1-1-%d", currentYear), DateTimeFormatter.ofPattern("d-M-uuuu"));
+
+        age = calculateAge(currentDate);
 
         init();
     }
 
     private void init(){
-        age = calculateAge();
 
         skills = new HashMap<>();
         setRandomSkills();
@@ -59,31 +73,29 @@ public class Basketballer extends Person implements BasketballerInterface, Compa
             aging();
     }
 
-    private int calculateAge(){
+    private int calculateAge(LocalDate currentDate){
 
-        LocalDate today = LocalDate.now();
-
-        Period period = Period.between(dateOfBirth, today);
+        Period period = Period.between(dateOfBirth, currentDate);
 
         return period.getYears();
     }
 
     private void setRandomSkills(){
-        skills.put("Shoot", ThreadLocalRandom.current().nextInt(1, 11));
-        skills.put("Pass", ThreadLocalRandom.current().nextInt(1, 11));
-        skills.put("Block", ThreadLocalRandom.current().nextInt(1, 11));
-        skills.put("Steal", ThreadLocalRandom.current().nextInt(1, 11));
-        skills.put("Sprint", ThreadLocalRandom.current().nextInt(1, 11));
+        skills.put("Shoot", ThreadLocalRandom.current().nextInt(1, skillsUpperBoundary));
+        skills.put("Pass", ThreadLocalRandom.current().nextInt(1, skillsUpperBoundary));
+        skills.put("Block", ThreadLocalRandom.current().nextInt(1, skillsUpperBoundary));
+        skills.put("Steal", ThreadLocalRandom.current().nextInt(1, skillsUpperBoundary));
+        skills.put("Sprint", ThreadLocalRandom.current().nextInt(1, skillsUpperBoundary));
     }
 
     @Override
     public void aging() {
-        decreaseSkills();
+        decreaseSkills(decreaseUnit);
     }
 
-    private void decreaseSkills(){
+    public void decreaseSkills(int units){
         for (String skill : skills.keySet()) {
-            int decreasedSkillLevel = skills.get(skill) - decreaseUnit;
+            int decreasedSkillLevel = skills.get(skill) - units;
 
             if(decreasedSkillLevel < 1)
                 decreasedSkillLevel = 1;
@@ -110,9 +122,9 @@ public class Basketballer extends Person implements BasketballerInterface, Compa
         return sum / skills.keySet().size();
     }
 
-    public static ArrayList<Basketballer> getUniqueRandomBasketballers(int quantity){
+    public static ArrayList<Basketballer> getUniqueRandomBasketballers(int quantity, int currentYear){
         ArrayList<Basketballer> result = new ArrayList<>();
-        HashSet<Long> usedIDs = new HashSet<>();
+        HashSet<String> usedIDs = new HashSet<>();
 
         //Reading data files
         ArrayList<String> names = readData(namesFile);
@@ -125,18 +137,18 @@ public class Basketballer extends Person implements BasketballerInterface, Compa
         String randomSurname = surnames.get(ThreadLocalRandom.current().nextInt(0, surnames.size()));
 
         long randomDateStr = ThreadLocalRandom.current().nextLong(
-                LocalDate.parse("1-1-1980",DateTimeFormatter.ofPattern("d-M-uuuu")).toEpochDay(),
-                LocalDate.parse("1-1-2004",DateTimeFormatter.ofPattern("d-M-uuuu")).toEpochDay()
+
+                LocalDate.parse(String.format("1-1-%d", currentYear - MAX_AGE),DateTimeFormatter.ofPattern("d-M-uuuu")).toEpochDay(),
+                LocalDate.parse(String.format("1-1-%d", currentYear - MIN_AGE),DateTimeFormatter.ofPattern("d-M-uuuu")).toEpochDay()
                 );
         LocalDate randomDateOfBirth = LocalDate.ofEpochDay(randomDateStr);
 
-        int randomQuantityOfWins = ThreadLocalRandom.current().nextInt(0,82);
         double randomHeight = ThreadLocalRandom.current().nextDouble(1.60, 2.40);
 
-        long randomId = generateUniqueId(usedIDs);
+        String randomId = generateUniqueId(usedIDs, IDLength);
 
             Basketballer basketballer = new Basketballer(randomName, randomSurname, randomId, randomHeight,
-                    randomDateOfBirth, randomQuantityOfWins);
+                    randomDateOfBirth, currentYear);
             result.add(basketballer);
         }
 
@@ -164,19 +176,92 @@ public class Basketballer extends Person implements BasketballerInterface, Compa
         return  data;
     }
 
-    private static long generateUniqueId(Set<Long> usedIds){
-        long randomId = ThreadLocalRandom.current().nextLong(1, 10000);
+    protected String getCSVFormattedData(){
+        String part1 = String.format("%s,%s,%s,%.2f,%d,%d,%s,%d,%d," ,
+                name, surname, ID, height, age,
+                dateOfBirth.getDayOfMonth(), dateOfBirth.getMonth(), dateOfBirth.getYear(),
+                quantityOfWins);
 
-        while (usedIds.contains(randomId))
-            randomId = ThreadLocalRandom.current().nextLong(1, 10000);
+        String part2 = String.format("%d,%d,%d,%d,%d", skills.get("Pass"), skills.get("Steal"),
+                skills.get("Block"), skills.get("Sprint"), skills.get("Shoot"));
 
-        usedIds.add(randomId);
-        return randomId;
+        return part1 + part2;
     }
+
+    public static void exportData(List<Basketballer> basketballers) {
+
+        BufferedWriter bufferedWriter = null;
+        try {
+            bufferedWriter = new BufferedWriter(new FileWriter(exportFile));
+
+            for(Basketballer basketballer : basketballers){
+
+                bufferedWriter.write(basketballer.getCSVFormattedData());
+                bufferedWriter.newLine();
+            }
+
+        } catch (IOException ex) {
+            System.out.println(ex.getMessage());
+
+        } finally {
+            try {
+                bufferedWriter.close();
+
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public static ArrayList<Basketballer> importData(String filePath){
+        ArrayList<Basketballer> basketballers= new ArrayList<>();
+
+        try {
+            Stream<String> rows = Files.lines(Paths.get(filePath));
+            rows
+                    .map(x -> x.split(","))
+                    .filter(x -> x.length == 14) //Fixme
+                    .forEach(row -> {
+                            Basketballer basketballer = new Basketballer();
+                            basketballer.setName(row[0]);
+                            basketballer.setSurname(row[1]);
+                            basketballer.setID(row[2]);
+                            basketballer.setHeight(Double.parseDouble(row[3]));
+                            basketballer.setAge(Integer.parseInt(row[4]));
+                            String dateOfBirth = String.format("%d-%s-%d",
+                                    Integer.parseInt(row[5]), row[6].charAt(0) + row[6].substring(1, row[6].length()).toLowerCase(),
+                                    Integer.parseInt(row[7]));
+                            basketballer.setDateOfBirth(LocalDate.parse(dateOfBirth,
+                                    DateTimeFormatter.ofPattern("d-MMMM-uuuu")));
+                            basketballer.setQuantityOfWins(Integer.parseInt(row[8]));
+
+                            basketballer.setSkills(new HashMap<String, Integer>() {{
+                               put("Pass", Integer.parseInt(row[9]));
+                               put("Steal", Integer.parseInt(row[10]));
+                               put("Block", Integer.parseInt(row[11]));
+                               put("Sprint", Integer.parseInt(row[12]));
+                               put("Shoot", Integer.parseInt(row[13]));
+                            }}
+                            );
+                            basketballers.add(basketballer);
+                    });
+                    rows.close();
+                    return  basketballers;
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    protected String getShortenedData(){
+        return  String.format("%s %s ID:%s Age:%d Skills score:%.2f",
+                name, surname, ID, age, averageSkillScores());
+    }
+
 
     @Override
     public String toString() {
-        String info = String.format("%s %s ID%d %dyrs. %d %s %d %.2fm %d wins " , name, surname, ID, age,
+        String info = String.format("%s %s ID%s %dyrs. %d %s %d %.2fm %d wins " , name, surname, ID, age,
                 dateOfBirth.getDayOfMonth(), dateOfBirth.getMonth(), dateOfBirth.getYear(),
                 height, quantityOfWins);
 
@@ -199,6 +284,30 @@ public class Basketballer extends Person implements BasketballerInterface, Compa
 
     public void setSkills(Map<String, Integer> skills) {
         this.skills = skills;
+    }
+
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setHeight(double height) {
+        this.height = height;
+    }
+
+    public void setQuantityOfWins(int quantityOfWins) {
+        this.quantityOfWins = quantityOfWins;
+    }
+
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+
+    public double getHeight() {
+        return height;
+    }
+
+    public int getQuantityOfWins() {
+        return quantityOfWins;
     }
 
     @Override

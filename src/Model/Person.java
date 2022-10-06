@@ -3,18 +3,46 @@ package Model;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
+import java.util.Set;
 
 public class Person {
     protected String name;
     protected String surname;
-    protected long ID;
+    protected String ID;
+
+    protected static int skillsUpperBoundary = 10;
+    protected static int IDLength = 11; // FIXME: IDLength
 
     public Person() {}
 
-    public Person(String name, String surname, long ID) {
+    public Person(String name, String surname, String ID) {
         this.name = name;
         this.surname = surname;
         this.ID = ID;
+    }
+
+    protected static String generateUniqueId(Set<String> usedIds, int IDLength){
+        int[] digits = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+
+        StringBuilder IDBuilder = new StringBuilder(IDLength);
+        Random random = new Random();
+
+        for (int i = 0; i < IDLength; i++) {
+            IDBuilder.append(digits[random.nextInt(10)]);
+        }
+
+        while(usedIds.contains(IDBuilder.toString())) {
+            //IDBuilder.setLength(0);
+            for (int i = 0; i < IDLength; i++) {
+
+                IDBuilder.append(digits[random.nextInt(10)]);
+            }
+        }
+        String ID = IDBuilder.toString();
+        usedIds.add(ID);
+
+        return ID;
     }
 
     public String getName() {
@@ -33,11 +61,11 @@ public class Person {
         this.surname = surname;
     }
 
-    public long getID() {
+    public String getID() {
         return ID;
     }
 
-    public void setID(long ID) {
+    public void setID(String ID) {
         this.ID = ID;
     }
 
